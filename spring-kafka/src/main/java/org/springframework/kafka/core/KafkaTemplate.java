@@ -35,7 +35,6 @@ import org.springframework.util.Assert;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
-
 /**
  * A template for executing high-level operations.
  *
@@ -44,6 +43,7 @@ import org.springframework.util.concurrent.SettableListenableFuture;
  *
  * @author Marius Bogoevici
  * @author Gary Russell
+ * @author Igor Stepanov
  */
 public class KafkaTemplate<K, V> implements KafkaOperations<K, V> {
 

@@ -17,10 +17,12 @@
 package org.springframework.kafka.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.springframework.kafka.test.assertj.KafkaConditions.key;
 import static org.springframework.kafka.test.assertj.KafkaConditions.partition;
 import static org.springframework.kafka.test.assertj.KafkaConditions.value;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -46,10 +48,10 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 
-
 /**
  * @author Gary Russell
  * @author Artem Bilan
+ * @author Igor Stepanov
  *
  */
 public class KafkaTemplateTests {
@@ -195,14 +197,12 @@ public class KafkaTemplateTests {
 		pf.createProducer().close();
 	}
 
-	@Test(expected = IllegalStateException.class)
+	@Test
 	public void flushWithoutSend() throws Exception {
-		Map<String, Object> senderProps = KafkaTestUtils.producerProps(embeddedKafka);
-		DefaultKafkaProducerFactory<String, String> pf = new DefaultKafkaProducerFactory<String, String>(senderProps);
-		pf.setKeySerializer(new StringSerializer());
-		KafkaTemplate<String, String> template = new KafkaTemplate<>(pf);
-		template.setDefaultTopic(STRING_KEY_TOPIC);
-		template.flush();
-		throw new AssertionError("IllegalStateException must be thrown upon flushing");
+		DefaultKafkaProducerFactory<String, String> pf = new DefaultKafkaProducerFactory<String, String>(Collections.emptyMap());
+		KafkaTemplate<String, String> template = new KafkaTemplate<String, String>(pf);
+		assertThatExceptionOfType(IllegalStateException.class)
+				.isThrownBy(() -> template.flush())
+				.withMessageContaining("'producer' must not be null for flushing.");
 	}
 }
