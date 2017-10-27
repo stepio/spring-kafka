@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.lang.Math;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -106,7 +107,7 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 	 * @param topics the topics to create (2 partitions per).
 	 */
 	public KafkaEmbedded(int count, boolean controlledShutdown, String... topics) {
-		this(count, controlledShutdown, 2, topics);
+		this(count, controlledShutdown, Math.min(2, count), topics);
 	}
 
 	/**
@@ -157,7 +158,8 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 		ZkUtils zkUtils = new ZkUtils(getZkClient(), null, false);
 		Properties props = new Properties();
 		for (String topic : this.topics) {
-			AdminUtils.createTopic(zkUtils, topic, this.partitionsPerTopic, this.count, props);
+			int replicationFactor = this.count - 1;
+			AdminUtils.createTopic(zkUtils, topic, this.partitionsPerTopic, replicationFactor, props);
 		}
 		System.setProperty(SPRING_EMBEDDED_KAFKA_BROKERS, getBrokersAsString());
 	}
