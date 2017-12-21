@@ -29,6 +29,7 @@ import java.lang.Math;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.net.ServerSocketFactory;
 
@@ -77,6 +78,7 @@ import scala.collection.Set;
 public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 
 	public static final String SPRING_EMBEDDED_KAFKA_BROKERS = "spring.embedded.kafka.brokers";
+	public static final int MIN_BROKERS_COUNT = 3;
 
 	public static final long METADATA_PROPAGATION_TIMEOUT = 10000L;
 
@@ -119,6 +121,9 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 	 * @param topics the topics to create.
 	 */
 	public KafkaEmbedded(int count, boolean controlledShutdown, int partitions, String... topics) {
+		if (!isEmpty(topics) && count < MIN_BROKERS_COUNT) {
+			throw new IllegalArgumentException("At least " + MIN_BROKERS_COUNT + " brokers are required to create topics");
+		}
 		this.count = count;
 		this.controlledShutdown = controlledShutdown;
 		if (topics != null) {
@@ -140,10 +145,17 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 		this.zookeeperClient = new ZkClient(this.zkConnect, zkSessionTimeout, zkConnectionTimeout,
 				ZKStringSerializer$.MODULE$);
 		this.kafkaServers = new ArrayList<>();
+		List<ServerSocket> sockets = new ArrayList<>(this.count);
 		for (int i = 0; i < this.count; i++) {
-			ServerSocket ss = ServerSocketFactory.getDefault().createServerSocket(0);
-			int randomPort = ss.getLocalPort();
-			ss.close();
+			sockets.add(ServerSocketFactory.getDefault().createServerSocket(0));
+		}
+		String listeners = "advertised.listeners=" + String.join(",", sockets.stream()
+				.map(ServerSocket::getLocalPort)
+				.map(port -> "PLAINTEXT://localhost:" + port)
+				.collect(Collectors.toList()));
+		for (int i = 0; i < this.count; i++) {
+			int randomPort = sockets.get(i).getLocalPort();
+			sockets.get(i).close();
 			Properties brokerConfigProperties = TestUtils.createBrokerConfig(i, this.zkConnect, this.controlledShutdown,
 					true, randomPort,
 					scala.Option.<SecurityProtocol>apply(null),
@@ -152,14 +164,14 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 			brokerConfigProperties.setProperty("replica.socket.timeout.ms", "1000");
 			brokerConfigProperties.setProperty("controller.socket.timeout.ms", "1000");
 			brokerConfigProperties.setProperty("offsets.topic.replication.factor", "1");
+			brokerConfigProperties.setProperty("advertised.listeners", listeners);
 			KafkaServer server = TestUtils.createServer(new KafkaConfig(brokerConfigProperties), SystemTime$.MODULE$);
 			this.kafkaServers.add(server);
 		}
 		ZkUtils zkUtils = new ZkUtils(getZkClient(), null, false);
 		Properties props = new Properties();
 		for (String topic : this.topics) {
-			int replicationFactor = this.count - 1;
-			AdminUtils.createTopic(zkUtils, topic, this.partitionsPerTopic, replicationFactor, props);
+			AdminUtils.createTopic(zkUtils, topic, this.partitionsPerTopic, getTopicsReplicationFactor(), props);
 		}
 		System.setProperty(SPRING_EMBEDDED_KAFKA_BROKERS, getBrokersAsString());
 	}
@@ -238,6 +250,10 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 	@Override
 	public int getPartitionsPerTopic() {
 		return this.partitionsPerTopic;
+	}
+
+	public int getTopicsReplicationFactor() {
+		return this.count - 1;
 	}
 
 	public void bounce(BrokerAddress brokerAddress) {
@@ -420,4 +436,7 @@ public class KafkaEmbedded extends ExternalResource implements KafkaRule {
 			.isTrue();
 	}
 
+	public boolean isEmpty(String [] array) {
+		return array == null || array.length < 1;
+	}
 }
